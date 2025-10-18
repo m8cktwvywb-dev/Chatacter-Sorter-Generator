@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Character Sorter — simple</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--text:#e6e8ee;--muted:#9aa4b2;--accent:#6aa3ff;--btn:#222735;--btnH:#2b3346}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Arial}
+  header{padding:14px 16px;border-bottom:1px solid #1e2430;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  h1{font-size:18px;margin:0} .pill{font-size:12px;padding:2px 8px;border:1px solid #2b3346;border-radius:999px;color:var(--muted)}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--card);border:1px solid #20283a;border-radius:12px;overflow:hidden}
+  .card h2{margin:0;padding:12px 14px;border-bottom:1px solid #20283a;background:#121620;font-size:15px}
+  .card .body{padding:12px 14px}
+  textarea,input,button{width:100%} textarea,input{background:#0f1320;color:var(--text);border:1px solid #26314a;border-radius:10px;padding:10px}
+  button{appearance:none;border:1px solid #2b3346;background:var(--btn);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}
+  button:hover{background:var(--btnH)} .row{display:grid;gap:8px;margin:8px 0}
+  .two{grid-template-columns:1fr 1fr} .two>button{width:auto}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .char{border:1px solid #20283a;border-radius:12px;overflow:hidden;background:#0c1018}
+  .char img{width:100%;aspect-ratio:1/1;object-fit:cover;background:#0a0d13}
+  .meta{padding:10px;font-weight:600}
+  ol{margin:0;padding-left:20px}
+  .status{color:var(--muted);font-size:13px;margin-top:6px}
+  a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header><h1>⚡ Character Sorter — simple</h1><span class="pill" id="pill">prêt</span></header>
+<div class="wrap">
+  <div class="grid">
+    <!-- Config -->
+    <div class="card">
+      <h2>Configurer / Partager</h2>
+      <div class="body">
+        <div class="row"><label>Titre</label><input id="title" placeholder="Mon classement de persos"></div>
+        <div class="row">
+          <label>Éditer la liste (JSON) — format: [{"id":"luffy","name":"Luffy","image":"https://..."}, …]</label>
+          <textarea id="json" rows="8"></textarea>
+          <div class="status">Astuce: mets des URLs d’images (512×512 recommandé). Les <code>id</code> doivent être uniques.</div>
+        </div>
+        <div class="row two">
+          <button id="sample">Charger un exemple</button>
+          <button id="apply">Utiliser ces données</button>
+        </div>
+        <div class="row"><label>Lien à partager</label><input id="share" readonly></div>
+      </div>
+    </div>
+
+    <!-- Tri -->
+    <div class="card">
+      <h2 id="outTitle">Classement</h2>
+      <div class="body">
+        <div class="pair">
+          <div class="char"><img id="imgA" alt=""><div class="meta" id="nameA">—</div></div>
+          <div class="char"><img id="imgB" alt=""><div class="meta" id="nameB">—</div></div>
+        </div>
+        <div class="row two">
+          <button id="pickA">Préférer A</button>
+          <button id="pickB">Préférer B</button>
+        </div>
+        <div class="row"><button id="tie">Égalité</button></div>
+        <div class="status" id="status">Charge une liste puis lance le tri.</div>
+        <div class="row"><button id="copyTxt">Copier le classement en texte</button></div>
+        <ol id="result"></ol>
+      </div>
+    </div>
+  </div>
+  <p class="status">Héberge simplement ce fichier sur GitHub Pages / Netlify et partage l’URL (le pool est encodé dans le hash).</p>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const sample=[{id:"a",name:"Alice",image:"https://picsum.photos/seed/alice/512"},
+{id:"b",name:"Bob",image:"https://picsum.photos/seed/bob/512"},
+{id:"c",name:"Chloé",image:"https://picsum.photos/seed/chloe/512"},
+{id:"d",name:"Diego",image:"https://picsum.photos/seed/diego/512"},
+{id:"e",name:"Elena",image:"https://picsum.photos/seed/elena/512"}];
+
+let title="Classement";
+let items=[];      // [{id,name,image}]
+let queue=[];      // tâches de merge
+let current=null;  // {a,b,resolve}
+let results=null;
+
+function encodeShare(payload){
+  return location.origin+location.pathname+"#data="+btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+}
+function decodeShare(hash){
+  if(!hash.startsWith("#data=")) return null;
+  try{ return JSON.parse(decodeURIComponent(escape(atob(hash.slice(6))))); }catch{ return null; }
+}
+
+function setStatus(t){ $('#status').textContent=t; }
+function setPill(t){ $('#pill').textContent=t; }
+
+function showPair(a,b,resolve){
+  current={a,b,resolve};
+  $('#imgA').src=a.image||""; $('#nameA').textContent=a.name||"";
+  $('#imgB').src=b.image||""; $('#nameB').textContent=b.name||"";
+  setStatus("Choisis A / B / Égalité…"); setPill("en cours");
+}
+
+function renderResults(arr){
+  const ol=$('#result'); ol.innerHTML="";
+  arr.forEach((x,i)=>{ const li=document.createElement('li'); li.textContent=x.name; ol.appendChild(li); });
+  setStatus("Tri terminé 🎉"); setPill("terminé");
+}
+
+function startSort(list){
+  results=null; queue=[]; current=null; $('#result').innerHTML="";
+  // créer des runs unitaires
+  let runs=list.map(x=>[x]);
+  // boucle: on empile des merges à faire
+  while(runs.length>1){
+    const next=[];
+    for(let i=0;i<runs.length;i+=2){
+      if(i+1<runs.length) next.push({type:"merge",left:runs[i],right:runs[i+1],i:0,j:0,out:[]});
+      else next.push({type:"pass",run:runs[i]});
+    }
+    runs=next;
+    queue.push({type:"level",runs});
+  }
+  queue.push({type:"finish"});
+  step();
+}
+
+function step(){
+  if(current) return;
+  if(!queue.length) return;
+  const task=queue.shift();
+
+  if(task.type==="level"){
+    // déplier les merges de ce niveau
+    const tmp=[];
+    task.runs.forEach(r=>{
+      if(r.type==="pass"){ tmp.push({type:"collect",run:r.run}); }
+      else tmp.push(r);
+    });
+    // on va processer chaque merge jusqu'à ce qu'il produise un "collect"
+    queue.unshift({type:"collectLevel",collected:[]});
+    tmp.reverse().forEach(t=>queue.unshift(t));
+    step(); return;
+  }
+
+  if(task.type==="merge"){
+    const {left,right}=task;
+    const a=task.i<left.length?left[task.i]:null;
+    const b=task.j<right.length?right[task.j]:null;
+    if(!a && !b){ queue.unshift({type:"collect",run:task.out}); step(); return; }
+    if(a && !b){ task.out.push(a); task.i++; queue.unshift(task); step(); return; }
+    if(b && !a){ task.out.push(b); task.j++; queue.unshift(task); step(); return; }
+    showPair(a,b,(choice)=>{
+      if(choice==="A"){ task.out.push(a); task.i++; }
+      else if(choice==="B"){ task.out.push(b); task.j++; }
+      else { task.out.push(a); task.out.push(b); task.i++; task.j++; }
+      current=null; queue.unshift(task); step();
+    });
+    return;
+  }
+
+  if(task.type==="collect"){
+    // insérer ce run collecté avant le collecteur de niveau
+    const idx=queue.findIndex(t=>t.type==="collectLevel");
+    if(idx>-1){ queue[idx].collected.push(task.run); }
+    step(); return;
+  }
+
+  if(task.type==="collectLevel"){
+    // reconstruire Runs pour niveau suivant
+    if(task.collected.length===1){ results=task.collected[0]; queue.unshift({type:"maybeNext"}); step(); return; }
+    let runs=task.collected.map(x=>x);
+    const next=[];
+    for(let i=0;i<runs.length;i+=2){
+      if(i+1<runs.length) next.push({type:"merge",left:runs[i],right:runs[i+1],i:0,j:0,out:[]});
+      else next.push({type:"pass",run:runs[i]});
+    }
+    queue.unshift({type:"level",runs:next}); step(); return;
+  }
+
+  if(task.type==="maybeNext"){ step(); return; }
+
+  if(task.type==="finish"){
+    if(results){ renderResults(results); }
+    else setStatus("Rien à trier.");
+    return;
+  }
+}
+
+/* --- UI --- */
+$('#pickA').onclick=()=> current?.resolve("A");
+$('#pickB').onclick=()=> current?.resolve("B");
+$('#tie').onclick =()=> current?.resolve("TIE");
+
+$('#sample').onclick=()=>{
+  $('#title').value="Exemple";
+  $('#json').value=JSON.stringify(sample,null,2);
+};
+
+$('#apply').onclick=()=>{
+  try{
+    const parsed=JSON.parse($('#json').value.trim()||"[]");
+    if(!Array.isArray(parsed)||parsed.length<2) throw new Error("Il faut au moins 2 éléments.");
+    items=parsed; title=$('#title').value.trim()||"Classement";
+    $('#outTitle').textContent=title;
+    $('#share').value=encodeShare({title,items});
+    setPill("en cours");
+    setStatus("Préparation du tri…");
+    startSort(items);
+  }catch(e){ alert("JSON invalide : "+e.message); }
+};
+
+$('#copyTxt').onclick=async ()=>{
+  const arr=results||[];
+  if(!arr.length){ alert("Aucun résultat pour l’instant."); return; }
+  const text=arr.map((x,i)=>`${i+1}. ${x.name}`).join("\n");
+  await navigator.clipboard.writeText(text);
+  alert("Classement copié !");
+};
+
+/* --- Démarrage: charger via lien partagé (hash) si présent --- */
+(function init(){
+  const shared=decodeShare(location.hash||"");
+  if(shared&&Array.isArray(shared.items)){
+    $('#title').value=shared.title||"Classement";
+    $('#json').value=JSON.stringify(shared.items,null,2);
+    $('#share').value=encodeShare({title:shared.title||"Classement",items:shared.items});
+    $('#outTitle').textContent=shared.title||"Classement";
+    setStatus("Liste chargée depuis le lien. Clique « Utiliser ces données » pour lancer.");
+  }else{
+    $('#json').value=JSON.stringify(sample,null,2);
+  }
+})();
+</script>
+</body>
+</html>
