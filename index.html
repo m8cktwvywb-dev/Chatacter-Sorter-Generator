@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Character Sorter – Liste avec images</title>
+<style>
+body{font-family:system-ui;background:#0f1115;color:#e6e8ee;margin:0;padding:1em;line-height:1.4}
+h1{text-align:center;font-size:1.4em;margin-bottom:0.5em}
+textarea,input,button{width:100%;margin:.3em 0;padding:.6em;border-radius:8px;border:1px solid #333;background:#171a21;color:#e6e8ee}
+button{cursor:pointer;background:#222735}button:hover{background:#2b3346}
+img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px}
+.char{border:1px solid #333;border-radius:10px;overflow:hidden;background:#0c1018}
+.controls{display:flex;gap:.5em;justify-content:center;margin-top:.5em;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1em;margin-top:1em}
+ol{padding-left:1.2em;margin-top:1em}
+</style>
+</head>
+<body>
+<h1>⚡ Character Sorter — Liste personnalisée avec images</h1>
+
+<textarea id="json" rows="10"></textarea>
+<button id="start">Lancer le tri</button>
+
+<div id="pair" style="display:none">
+  <div class="grid">
+    <div class="char">
+      <img id="imgA" alt="">
+      <div style="padding:.6em;text-align:center;font-weight:600" id="nameA"></div>
+    </div>
+    <div class="char">
+      <img id="imgB" alt="">
+      <div style="padding:.6em;text-align:center;font-weight:600" id="nameB"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="pickA">Préférer A</button>
+    <button id="tie">Égalité</button>
+    <button id="pickB">Préférer B</button>
+  </div>
+</div>
+
+<ol id="result"></ol>
+
+<script>
+const names=[
+"Caligula","Judith","Mell’Höw Adaar","Dolores","Luxcy Keays","Francesca D. Machiavelli","L’Homme Ours","Servan Keays","Koebito Yukai","Faust Parsons","Dr. Carmilla Remington","Blaise Vat’N’Ike","Zazy Vat’N’Ike","Kassidy Blake","Duncan Blake","Lancelin du Lion","Feather Red","Dame Wendy-Mae","Akim Fränker","Jarred Kade Addison","Niguiro Kadjima","Viviane Yaga","Scialom Lazar","Dr. Van Branwen","Sean O’Deorain","Jefe don Herrera","Billy Lekid","Matt Jones","Dr. Sylvain Muslot","Marlène Vivere","Archibal Solomon Achab","Vivian Arsène","Hyacinthe Lenoir","Moe Winchester","Samson Blake","Caïhn Hawke","Nicolas Lampeur","Yvri Hugo","Abel Mordred","Darius Khalico Keays","Ignacio Cole","Oona O’Hara","Felicia Bonnet Marshall","Natasha Pendragon","Deborah Tashtwa","Parsifal","Alexandra Muslot","Cassandra Warren","Suhn Hawke","Morgane Pendragon","Drew Keaton Walker","Mercy Lena Blake","Lavender","Julius Khan","Sacha Ocelot","Mara","Serena Ricci","Raphaël Cole","Mélusine Renard","T4YL0R","Alma","Moira Blake","Megan Hipwell","Sasha","Malice","Olya Ionova","Willow Camus","Ernetz Schroder","Stella Karnaj","Esther Van Gosbeck","Orenjito Midöwi","Olivier Walker","Alwice Arigorn","Marlène FHUNGER","Pësha Hexter","Wilhelmina Harker","Sherimah Tabris","Faith Brooke","Märshy de Riva","Naëlle","Mictecacihuatl","Cerise Lily Balzac","Salem Aeducan","Tombe"
+];
+
+// création du pool avec images aléatoires
+const list = names.map(n=>({name:n,image:`https://picsum.photos/seed/${encodeURIComponent(n)}/512`}));
+document.getElementById("json").value = JSON.stringify(list,null,2);
+
+let queue=[],current=null,result=null;
+
+function step(){
+  if(current) return;
+  if(!queue.length){
+    document.getElementById("pair").style.display="none";
+    render(result);
+    return;
+  }
+  const task=queue.shift();
+  if(task.type==="merge"){
+    const {left,right}=task;
+    if(!left.length && !right.length){ queue.unshift({type:"collect",out:task.out}); return step(); }
+    if(!left.length){ task.out.push(right.shift()); queue.unshift(task); return step(); }
+    if(!right.length){ task.out.push(left.shift()); queue.unshift(task); return step(); }
+
+    const a=left[0], b=right[0];
+    current={resolve:c=>{
+      if(c==="A") task.out.push(left.shift());
+      else if(c==="B") task.out.push(right.shift());
+      else { task.out.push(left.shift(), right.shift()); }
+      current=null;
+      queue.unshift(task);
+      step();
+    }};
+    show(a,b);
+  } else if(task.type==="collect"){
+    collected.push(task.out);
+    if(queue[0] && queue[0].type==="collect") return step();
+  } else if(task.type==="level"){
+    collected=[];
+    task.arr.forEach(p=>queue.unshift(p));
+    queue.push({type:"finish"});
+    step();
+  } else if(task.type==="finish"){
+    if(collected.length===1) result=collected[0];
+    else {
+      const next=[];
+      for(let i=0;i<collected.length;i+=2){
+        if(i+1<collected.length) next.push({type:"merge",left:collected[i],right:collected[i+1],out:[]});
+        else next.push({type:"merge",left:collected[i],right:[],out:[]});
+      }
+      queue.unshift({type:"level",arr:next});
+    }
+    step();
+  }
+}
+
+function render(arr){
+  const ol=document.getElementById("result");
+  ol.innerHTML="";
+  arr.forEach(x=>{
+    const li=document.createElement("li");
+    li.textContent=x.name;
+    ol.appendChild(li);
+  });
+}
+
+function show(a,b){
+  document.getElementById("pair").style.display="block";
+  document.getElementById("nameA").textContent=a.name;
+  document.getElementById("imgA").src=a.image;
+  document.getElementById("nameB").textContent=b.name;
+  document.getElementById("imgB").src=b.image;
+}
+
+function start(arr){
+  result=null; queue=[];
+  const runs=arr.map(x=>[x]);
+  queue.push({type:"level",arr:runs});
+  step();
+}
+
+document.getElementById("start").onclick=()=>{
+  try{
+    const parsed=JSON.parse(document.getElementById("json").value);
+    start(parsed);
+  }catch(e){
+    alert("Erreur dans la liste JSON");
+  }
+};
+document.getElementById("pickA").onclick=()=>current?.resolve("A");
+document.getElementById("pickB").onclick=()=>current?.resolve("B");
+document.getElementById("tie").onclick =()=>current?.resolve("TIE");
+</script>
+</body>
+</html>
