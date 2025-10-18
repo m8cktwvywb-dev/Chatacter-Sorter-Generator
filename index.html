@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Character Sorter — duels (beige + undo)</title>
+<style>
+  :root{
+    --bg:#f5efe6; --text:#2b2b2b; --muted:#6f665d;
+    --card:#fffaf3; --border:#e6dccb;
+    --btn:#e8decc; --btnH:#e0d4be; --accent:#5a7ca4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial}
+  header{padding:16px;border-bottom:1px solid var(--border);background:#faf4ea}
+  h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.2px}
+  .wrap{max-width:980px;margin:0 auto;padding:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .card h2{margin:0;padding:12px 14px;border-bottom:1px solid var(--border);font-size:15px;background:#fbf5ea}
+  .card .body{padding:12px 14px}
+  textarea{width:100%;background:#fcf7ee;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+  button{appearance:none;border:1px solid var(--border);background:var(--btn);color:var(--text);padding:11px 14px;border-radius:999px;cursor:pointer}
+  button:hover{background:var(--btnH)}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .char{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:transform .05s ease}
+  .char:hover{transform:translateY(-1px)}
+  .char img{width:100%;aspect-ratio:1/1;object-fit:cover;background:#f0e7d9}
+  .meta{padding:10px;text-align:center;font-weight:700}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin:8px 0;color:var(--muted);font-size:13px}
+  .error{background:#faece9;border:1px solid #e3c1ba;color:#7e3429;padding:8px;border-radius:10px;margin:.5rem 0;display:none}
+  ol{margin:0;padding-left:0;list-style:none;display:grid;gap:8px}
+  .row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:6px}
+  .row img{width:42px;height:42px;object-fit:cover;border-radius:10px;background:#f0e7d9;border:1px solid var(--border)}
+  .row .nm{font-weight:600}
+  .rank{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#fbf5ea;border:1px solid var(--border);font-weight:700;color:#7a6b57}
+  .hint{color:var(--muted);font-size:12px;text-align:center;margin-top:6px}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr} .pair{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<header><h1>⚡ Character Sorter — duels interactifs</h1></header>
+
+<div class="wrap">
+  <div id="err" class="error"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Liste & images (modifiable)</h2>
+      <div class="body">
+        <p class="hint">Édite ta liste (name + image). Clique <b>Lancer</b>, puis touche/click sur une carte pour voter. <b>Égalité</b> est un bouton séparé. <b>Retour</b> annule le dernier clic.</p>
+        <textarea id="json" rows="10"></textarea>
+        <div class="controls">
+          <button id="start">Lancer le tri</button>
+          <button id="undo" title="Annuler le dernier choix">↩︎ Retour</button>
+          <button id="reset">Réinitialiser</button>
+        </div>
+        <div class="bar"><span id="status">Prêt.</span><span id="progress"></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Duels</h2>
+      <div class="body">
+        <div id="pair" class="pair" style="display:none">
+          <div id="charA" class="char" role="button" aria-label="Choisir A">
+            <img id="imgA" alt="">
+            <div class="meta" id="nameA">—</div>
+          </div>
+          <div id="charB" class="char" role="button" aria-label="Choisir B">
+            <img id="imgB" alt="">
+            <div class="meta" id="nameB">—</div>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="tie">Égalité</button>
+        </div>
+        <p class="hint">Raccourcis : A / E / B</p>
+        <h2 style="margin:10px 0 6px">Résultat</h2>
+        <ol id="result"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====== Données par défaut (tu peux tout changer) ====== */
+const names=[
+"Caligula","Judith","Mell’Höw Adaar","Dolores","Luxcy Keays","Francesca D. Machiavelli","L’Homme Ours","Servan Keays","Koebito Yukai","Faust Parsons","Dr. Carmilla Remington","Blaise Vat’N’Ike","Zazy Vat’N’Ike","Kassidy Blake","Duncan Blake","Lancelin du Lion","Feather Red","Dame Wendy-Mae","Akim Fränker","Jarred Kade Addison","Niguiro Kadjima","Viviane Yaga","Scialom Lazar","Dr. Van Branwen","Sean O’Deorain","Jefe don Herrera","Billy Lekid","Matt Jones","Dr. Sylvain Muslot","Marlène Vivere","Archibal Solomon Achab","Vivian Arsène","Hyacinthe Lenoir","Moe Winchester","Samson Blake","Caïhn Hawke","Nicolas Lampeur","Yvri Hugo","Abel Mordred","Darius Khalico Keays","Ignacio Cole","Oona O’Hara","Felicia Bonnet Marshall","Natasha Pendragon","Deborah Tashtwa","Parsifal","Alexandra Muslot","Cassandra Warren","Suhn Hawke","Morgane Pendragon","Drew Keaton Walker","Mercy Lena Blake","Lavender","Julius Khan","Sacha Ocelot","Mara","Serena Ricci","Raphaël Cole","Mélusine Renard","T4YL0R","Alma","Moira Blake","Megan Hipwell","Sasha","Malice","Olya Ionova","Willow Camus","Ernetz Schroder","Stella Karnaj","Esther Van Gosbeck","Orenjito Midöwi","Olivier Walker","Alwice Arigorn","Marlène FHUNGER","Pësha Hexter","Wilhelmina Harker","Sherimah Tabris","Faith Brooke","Märshy de Riva","Naëlle","Mictecacihuatl","Cerise Lily Balzac","Salem Aeducan","Tombe"
+];
+const defaultList = names.map(n=>({name:n,image:`https://picsum.photos/seed/${encodeURIComponent(n)}/512`}));
+document.getElementById('json').value = JSON.stringify(defaultList, null, 2);
+
+/* ====== Helpers UI ====== */
+const $=s=>document.querySelector(s);
+const statusEl=$('#status'), progressEl=$('#progress'), errEl=$('#err');
+function setStatus(t){ statusEl.textContent=t; }
+function setProgress(done,total){ progressEl.textContent = total? `Comparaisons : ${done}/${total}` : ""; }
+function showError(msg){ errEl.textContent = msg; errEl.style.display = 'block'; }
+function hideError(){ errEl.style.display = 'none'; }
+function showPair(a,b){
+  $('#pair').style.display='grid';
+  $('#nameA').textContent=a.name; $('#imgA').src=a.image||"";
+  $('#nameB').textContent=b.name; $('#imgB').src=b.image||"";
+}
+
+/* ====== Moteur: merge sort interactif + undo ====== */
+let pending=[], nextRuns=[], current=null, result=null;
+let comparisonsDone=0, comparisonsTotal=0;
+let history=[]; // pile d'undo (fonctions à exécuter pour revenir en arrière)
+
+function estimate(n){ return Math.max(0, Math.floor(n * Math.log2(Math.max(1,n)))); }
+function makeMerges(runs){
+  const merges=[]; for(let i=0;i<runs.length;i+=2){
+    const L=runs[i].slice(); const R=i+1<runs.length?runs[i+1].slice():[];
+    merges.push({left:L,right:R,out:[]});
+  } return merges;
+}
+
+function startInteractiveSort(items){
+  pending = makeMerges(items.map(x=>[x]));
+  nextRuns = []; current=null; result=null; history=[];
+  comparisonsDone=0; comparisonsTotal=estimate(items.length);
+  setProgress(comparisonsDone, comparisonsTotal);
+  if(pending.length===1 && pending[0].right.length===0){ result=pending[0].left; renderResult(result); return; }
+  step();
+}
+
+function step(){
+  if(current) return;
+
+  if(pending.length===0){
+    if(nextRuns.length===1){ result=nextRuns[0]; $('#pair').style.display='none'; return renderResult(result); }
+    pending = makeMerges(nextRuns); nextRuns=[];
+  }
+
+  const m=pending[0]; if(!m) return;
+
+  // si un merge est fini, on le collecte et on passe
+  if(m.left.length===0 && m.right.length===0){ nextRuns.push(m.out); pending.shift(); return step(); }
+
+  // vidages auto (pas d'undo pour ceux-là, pas de clic utilisateur)
+  if(m.left.length===0){ m.out.push(m.right.shift()); return step(); }
+  if(m.right.length===0){ m.out.push(m.left.shift()); return step(); }
+
+  const A=m.left[0], B=m.right[0];
+  showPair(A,B); setStatus("Choisis : clic sur A / Égalité / clic sur B");
+  current = {
+    merge:m,
+    resolve:(choice)=>{
+      // applique le mouvement + enregistre l'inverse dans l'historique
+      let undoFn;
+      if(choice==="A"){
+        const x=m.left.shift(); m.out.push(x);
+        undoFn=()=>{ m.out.pop(); m.left.unshift(x); comparisonsDone--; setProgress(comparisonsDone,comparisonsTotal); };
+      }else if(choice==="B"){
+        const x=m.right.shift(); m.out.push(x);
+        undoFn=()=>{ m.out.pop(); m.right.unshift(x); comparisonsDone--; setProgress(comparisonsDone,comparisonsTotal); };
+      }else{ // TIE : A puis B
+        const x=m.left.shift(), y=m.right.shift(); m.out.push(x,y);
+        undoFn=()=>{ m.out.pop(); m.out.pop(); m.right.unshift(y); m.left.unshift(x); comparisonsDone--; setProgress(comparisonsDone,comparisonsTotal); };
+      }
+      history.push(undoFn);
+      comparisonsDone++; setProgress(comparisonsDone,comparisonsTotal);
+      current=null;
+      // attendre un tick pour laisser l'UI se peindre avant l'étape suivante
+      setTimeout(step,0);
+    }
+  };
+}
+
+/* ====== Résultat (avec miniatures) ====== */
+function renderResult(arr){
+  setStatus("Tri terminé 🎉");
+  const ol=$('#result'); ol.innerHTML="";
+  arr.forEach((x,i)=>{
+    const li=document.createElement('li'); li.className='row';
+    li.innerHTML = `<div class="rank">${i+1}</div><img src="${x.image||''}" alt=""><div class="nm">${x.name}</div>`;
+    ol.appendChild(li);
+  });
+}
+
+/* ====== Actions ====== */
+$('#start').addEventListener('click', ()=>{
+  hideError();
+  try{
+    const data=JSON.parse($('#json').value);
+    if(!Array.isArray(data)||data.length<2) throw new Error("Il faut au moins 2 personnages.");
+    $('#result').innerHTML=""; setStatus("Préparation du tri…");
+    startInteractiveSort(data);
+  }catch(e){ showError("JSON invalide : " + (e.message||e)); }
+});
+
+$('#reset').addEventListener('click', ()=>{
+  history=[]; pending=[]; nextRuns=[]; current=null; result=null;
+  $('#pair').style.display='none'; $('#result').innerHTML=""; setStatus("Prêt."); setProgress(0,0);
+});
+
+$('#undo').addEventListener('click', ()=>{
+  try{
+    if(!history.length){ return; }
+    const undoOp = history.pop();
+    // si on était au milieu d'un merge fini, remettre l'état pour relancer la même comparaison
+    undoOp && undoOp();
+    current=null; // on force à redemander le même duel
+    step(); // réaffiche la paire courante
+  }catch(e){ showError("Impossible d'annuler : " + (e.message||e)); }
+});
+
+// Clic direct sur les cartes
+$('#charA').addEventListener('click', ()=> current && current.resolve("A"));
+$('#charB').addEventListener('click', ()=> current && current.resolve("B"));
+$('#tie').addEventListener('click',  ()=> current && current.resolve("TIE"));
+
+// Raccourcis
+window.addEventListener('keydown', (e)=>{
+  const k=e.key.toLowerCase();
+  if(k==='a') current && current.resolve("A");
+  if(k==='b') current && current.resolve("B");
+  if(k==='e') current && current.resolve("TIE");
+});
+</script>
+</body>
+</html>
