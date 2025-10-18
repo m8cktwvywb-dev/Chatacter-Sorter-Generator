@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Character Sorter — duels interactifs (safe)</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--text:#e6e8ee;--muted:#a8b0bf;--btn:#222735;--btnH:#2b3346}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,Segoe UI,Roboto,Arial}
+  header{padding:16px;border-bottom:1px solid #1e2430}
+  h1{margin:0;font-size:18px}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
+  textarea,button{width:100%}
+  textarea{background:#0f1320;color:var(--text);border:1px solid #26314a;border-radius:10px;padding:10px}
+  button{appearance:none;border:1px solid #2b3346;background:var(--btn);color:var(--text);padding:12px 14px;border-radius:10px;cursor:pointer}
+  button:hover{background:var(--btnH)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{background:var(--card);border:1px solid #20283a;border-radius:12px;overflow:hidden}
+  .card h2{margin:0;padding:12px 14px;background:#121620;border-bottom:1px solid #20283a;font-size:15px}
+  .card .body{padding:12px 14px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .char{background:#0c1018;border:1px solid #20283a;border-radius:12px;overflow:hidden}
+  .char img{width:100%;aspect-ratio:1/1;object-fit:cover}
+  .meta{padding:10px;text-align:center;font-weight:600}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+  ol{margin:0;padding-left:22px}
+  .muted{color:var(--muted);font-size:13px}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin:8px 0;color:var(--muted);font-size:13px}
+  .error{background:#2b1a1a;border:1px solid #6b2c2c;color:#ffbdbd;padding:8px;border-radius:8px;margin:.5rem 0;display:none}
+  @media (max-width:700px){ .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <header><h1>⚡ Character Sorter — duels interactifs</h1></header>
+
+  <div class="wrap">
+    <div id="err" class="error"></div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Liste & images (modifiable)</h2>
+        <div class="body">
+          <p class="muted">Tu peux éditer cette liste quand tu veux. Les images par défaut viennent de picsum.photos (tu peux les remplacer).</p>
+          <textarea id="json" rows="10"></textarea>
+          <div class="controls">
+            <button id="start">Lancer le tri</button>
+          </div>
+          <div class="bar"><span id="status" class="muted">Prêt.</span><span id="progress" class="muted"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Duels</h2>
+        <div class="body">
+          <div id="pair" class="pair" style="display:none">
+            <div class="char">
+              <img id="imgA" alt="">
+              <div class="meta" id="nameA">—</div>
+            </div>
+            <div class="char">
+              <img id="imgB" alt="">
+              <div class="meta" id="nameB">—</div>
+            </div>
+          </div>
+          <div class="controls">
+            <button id="pickA">Préférer A</button>
+            <button id="tie">Égalité</button>
+            <button id="pickB">Préférer B</button>
+          </div>
+          <p class="muted" style="text-align:center;margin-top:6px">Raccourcis : A / E / B</p>
+          <h3 style="margin:10px 0 6px">Résultat</h3>
+          <ol id="result"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ======= Sécurité / compatibilité ======= */
+if(!Math.log2){ Math.log2 = function(x){ return Math.log(x)/Math.LN2; }; }
+function errBox(msg){
+  var el=document.getElementById('err');
+  el.textContent = 'Erreur: ' + msg;
+  el.style.display = 'block';
+}
+window.addEventListener('error', function(e){
+  errBox(e.message || 'Erreur JavaScript inconnue');
+});
+
+/* ======= Données (noms + images par défaut) ======= */
+const names=[
+"Caligula","Judith","Mell’Höw Adaar","Dolores","Luxcy Keays","Francesca D. Machiavelli","L’Homme Ours","Servan Keays","Koebito Yukai","Faust Parsons","Dr. Carmilla Remington","Blaise Vat’N’Ike","Zazy Vat’N’Ike","Kassidy Blake","Duncan Blake","Lancelin du Lion","Feather Red","Dame Wendy-Mae","Akim Fränker","Jarred Kade Addison","Niguiro Kadjima","Viviane Yaga","Scialom Lazar","Dr. Van Branwen","Sean O’Deorain","Jefe don Herrera","Billy Lekid","Matt Jones","Dr. Sylvain Muslot","Marlène Vivere","Archibal Solomon Achab","Vivian Arsène","Hyacinthe Lenoir","Moe Winchester","Samson Blake","Caïhn Hawke","Nicolas Lampeur","Yvri Hugo","Abel Mordred","Darius Khalico Keays","Ignacio Cole","Oona O’Hara","Felicia Bonnet Marshall","Natasha Pendragon","Deborah Tashtwa","Parsifal","Alexandra Muslot","Cassandra Warren","Suhn Hawke","Morgane Pendragon","Drew Keaton Walker","Mercy Lena Blake","Lavender","Julius Khan","Sacha Ocelot","Mara","Serena Ricci","Raphaël Cole","Mélusine Renard","T4YL0R","Alma","Moira Blake","Megan Hipwell","Sasha","Malice","Olya Ionova","Willow Camus","Ernetz Schroder","Stella Karnaj","Esther Van Gosbeck","Orenjito Midöwi","Olivier Walker","Alwice Arigorn","Marlène FHUNGER","Pësha Hexter","Wilhelmina Harker","Sherimah Tabris","Faith Brooke","Märshy de Riva","Naëlle","Mictecacihuatl","Cerise Lily Balzac","Salem Aeducan","Tombe"
+];
+// IDs simples pour éviter tout souci d’Unicode sur vieux Safari
+const defaultList = names.map((n,i)=>({ id:String(i+1), name:n, image:`https://picsum.photos/seed/${encodeURIComponent(n)}/512` }));
+document.getElementById('json').value = JSON.stringify(defaultList, null, 2);
+
+/* ======= UI helpers ======= */
+const $=s=>document.querySelector(s);
+function setStatus(t){ $('#status').textContent=t; }
+function setProgress(done,total){ $('#progress').textContent = total? `Comparaisons: ${done}/${total}` : ""; }
+function showPair(a,b){
+  $('#pair').style.display='grid';
+  $('#nameA').textContent=a.name; $('#imgA').src=a.image||"";
+  $('#nameB').textContent=b.name; $('#imgB').src=b.image||"";
+}
+
+/* ======= Moteur: Merge Sort interactif ======= */
+let pending=[];        // merges du niveau courant
+let nextRuns=[];       // runs du niveau suivant
+let current=null;      // {resolve}
+let result=null;       // ordre final
+let comparisonsDone=0; // compteur UX
+let comparisonsTotal=0;
+
+function makeMerges(runs){
+  const merges=[];
+  for(let i=0;i<runs.length;i+=2){
+    const left = runs[i].slice();
+    const right = (i+1<runs.length) ? runs[i+1].slice() : [];
+    merges.push({left:right.length?left:left, right:right, out:[]});
+  }
+  return merges;
+}
+function estimateComparisons(n){ return Math.max(0, Math.floor(n * Math.log2(Math.max(1,n)))); }
+
+function startInteractiveSort(items){
+  try{
+    pending = makeMerges(items.map(x=>[x]));
+    nextRuns = [];
+    current = null;
+    result = null;
+    comparisonsDone = 0;
+    comparisonsTotal = estimateComparisons(items.length);
+    setProgress(comparisonsDone, comparisonsTotal);
+    if(pending.length===1 && pending[0].right.length===0){
+      result = pending[0].left; renderResult(result); return;
+    }
+    step();
+  }catch(e){ errBox(e.message||e); }
+}
+
+function step(){
+  if(current) return; // on attend une action utilisateur
+
+  if(pending.length===0){
+    if(nextRuns.length===1){
+      result = nextRuns[0];
+      $('#pair').style.display='none';
+      return renderResult(result);
+    }
+    pending = makeMerges(nextRuns);
+    nextRuns = [];
+  }
+
+  const m = pending[0];
+  if(!m){ return; }
+
+  if(m.left.length===0 && m.right.length===0){
+    nextRuns.push(m.out);
+    pending.shift();
+    return step();
+  }
+  if(m.left.length===0){ m.out.push(m.right.shift()); return step(); }
+  if(m.right.length===0){ m.out.push(m.left.shift()); return step(); }
+
+  const A=m.left[0], B=m.right[0];
+  showPair(A,B);
+  setStatus("Choisis A / Égalité / B");
+  current = {
+    resolve: (choice)=>{
+      try{
+        comparisonsDone++; setProgress(comparisonsDone, comparisonsTotal);
+        if(choice==="A")      m.out.push(m.left.shift());
+        else if(choice==="B") m.out.push(m.right.shift());
+        else {                m.out.push(m.left.shift(), m.right.shift()); }
+        current=null;
+        step();
+      }catch(e){ errBox(e.message||e); }
+    }
+  };
+}
+
+/* ======= Rendu résultat ======= */
+function renderResult(arr){
+  setStatus("Tri terminé 🎉");
+  const ol = $('#result'); ol.innerHTML="";
+  arr.forEach(x=>{ const li=document.createElement('li'); li.textContent=x.name; ol.appendChild(li); });
+}
+
+/* ======= Actions ======= */
+$('#start').addEventListener('click', ()=>{
+  try{
+    const arr = JSON.parse($('#json').value);
+    if(!Array.isArray(arr) || arr.length<2) throw new Error("Il faut au moins 2 personnages.");
+    $('#err').style.display='none';
+    $('#result').innerHTML="";
+    setStatus("Préparation du tri…");
+    startInteractiveSort(arr);
+  }catch(e){
+    errBox((e && e.message) ? e.message : 'JSON invalide');
+  }
+});
+$('#pickA').addEventListener('click', ()=> current && current.resolve("A"));
+$('#pickB').addEventListener('click', ()=> current && current.resolve("B"));
+$('#tie').addEventListener('click',  ()=> current && current.resolve("TIE"));
+window.addEventListener('keydown', (e)=>{
+  const k=e.key.toLowerCase();
+  if(k==='a') current && current.resolve("A");
+  if(k==='b') current && current.resolve("B");
+  if(k==='e') current && current.resolve("TIE");
+});
+</script>
+</body>
+</html>
